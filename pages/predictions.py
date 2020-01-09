@@ -7,8 +7,10 @@ from dash.dependencies import Input, Output, State
 import pandas as pd
 from joblib import load
 import shap
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import io
+from io import BytesIO
 import base64
 
 # Imports from this application
@@ -107,6 +109,21 @@ layout = html.Div(
     ]
 )
 
+def fig_to_uri(in_fig, close_all=True, **save_args):
+    """
+    Save a figure as a URI
+    :param in_fig:
+    :return:
+    """
+    out_img = BytesIO()
+    in_fig.savefig(out_img, format='png', **save_args)
+    if close_all:
+        in_fig.clf()
+        plt.close('all')
+    out_img.seek(0)  # rewind file
+    encoded = base64.b64encode(out_img.read()).decode("ascii").replace("\n", "")
+    return "data:image/png;base64,{}".format(encoded)
+
 @app.callback(
     Output('prediction-content', 'children'),
     [Input('loan_amnt', 'value'), 
@@ -131,7 +148,7 @@ def predict(loan_amnt, int_rate, term, fico_range_high, annual_inc, home_ownersh
     return (f'The model predicts this loan has a {pred_proba:.0f}% probability of being Fully Paid.')
 
 @app.callback(
-    Output('shap-img', 'src_image'),
+    Output('shap-img', 'src'),
     [Input('explain-btn','n_clicks')],
     [State('loan_amnt', 'value'), 
      State('int_rate', 'value'),
@@ -162,14 +179,10 @@ def explain_png(n_clicks, loan_amnt, int_rate, term, fico_range_high, annual_inc
         base_value=explainer.expected_value, 
         shap_values=shap_values, 
         features=df_processed, 
-        link='logit',
-        show=True,
+        show=False,
         matplotlib=True)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    encoded = base64.b64encode(buf.read()).decode("ascii").replace("\n", "")
-    src_image = "data:image/png;base64,{}".format(encoded)
+    
+    out_url = fig_to_uri(fig)
 
     # Return image
-    return src_image
+    return out_url
